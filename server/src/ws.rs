@@ -1,13 +1,13 @@
 
 use futures::{StreamExt, FutureExt};
-use serde_json::from_str;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 use warp::ws::{WebSocket, Message};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::{Clients, structs::{Client, TopicsRequest}};
+use crate::{Clients, structs::Client, commands};
 
-pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut client: Client) {
+pub async fn client_connection(ws: WebSocket, clients: Clients) {
   let (client_ws_sender, mut client_ws_rcv) = ws.split();
   let (client_sender, client_rcv) = mpsc::unbounded_channel();
   let client_rcv = UnboundedReceiverStream::new(client_rcv);
@@ -18,24 +18,36 @@ pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut 
     }
   }));
 
-  client.sender = Some(client_sender);
-  clients.lock().await.insert(id.clone(), client);
+  let uuid = Uuid::new_v4().simple().to_string();
+  let nick = format!("user{}", &uuid[0..5]);
+  let client = Client {
+    user_id: uuid.clone(),
+    channel: String::from("general"),
+    sender: Some(client_sender),
+    nick
+  };
+  clients.lock().await.insert(
+    uuid.clone(),
+    client.clone()
+  );
 
-  println!("{} connected", id);
+  println!("{} connected", &uuid);
+
+  commands::send_system_message(client.nick, String::from("Welcome to the server"), &clients).await;
 
   while let Some(result) = client_ws_rcv.next().await {
     let msg = match result {
       Ok(msg) => msg,
       Err(e) => {
-        eprintln!("error receiving ws message for id: {} ({})", id.clone(), e);
+        eprintln!("error receiving ws message for id: {} ({})", uuid.clone(), e);
         break;
       }
     };
-    client_msg(&id, msg, &clients).await;
+    client_msg(&uuid, msg, &clients).await;
   }
 
-  clients.lock().await.remove(&id);
-  println!("{} disconnected", id)
+  clients.lock().await.remove(&uuid);
+  println!("{} disconnected", uuid)
 }
 
 async fn client_msg(id: &str, msg: Message, clients: &Clients) {
@@ -45,23 +57,45 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
     Err(_) => return,
   };
 
-  if message == "ping" || message == "ping\n" {
-    return;
-  }
+  if message.starts_with('/') {
+    let (command, params) = if let Some((c, p)) = message.split_once(' ') {
+      (c, Some(p))
+    } else {
+      (message, None)
+    };
 
-  let topics_req: TopicsRequest = match from_str(message) {
-    Ok(v) => v,
-    Err(e) => {
-      eprintln!("error while parsing message to topics request: {}", e);
-      return;
+    if let Some(client) = clients.lock().await.get_mut(id) {
+      match command {
+        "/nick" => if let Some(nick) = params {
+            commands::set_nick(client, nick);
+          } else {
+            commands::send_system_message(
+              id.to_string(), 
+              format!("Current nick: '{}'", client.nick), 
+              clients
+            ).await;
+          },
+        "/join" => if let Some(channel) = params {
+            commands::join(client, channel);
+          } else {
+            commands::send_system_message(
+              id.to_string(), 
+              format!("Current channel: '{}'", client.channel), 
+              clients
+            ).await;
+          },
+        "/ping" => (),
+        "/users" => commands::users(client, clients).await,
+        "/list" => commands::list(client, clients).await,
+        _ => commands::send_system_message(
+          id.to_string(), 
+          format!("Unknown command '{}'", command), 
+          clients
+        ).await,
+      }
     }
-  };
-
-  let mut locked = clients.lock().await;
-  match locked.get_mut(id) {
-    Some(v) => {
-      v.topics = topics_req.topics;
-    },
-    None => (),
-  };
+  } else {
+    // Publish message
+  }
 }
+

@@ -4,14 +4,10 @@ use warp::ws::Message;
 
 #[derive(Clone)]
 pub struct Client {
-    pub user_id: usize,
-    pub topics: Vec<String>,
+    pub user_id: String,
+    pub nick: String,
+    pub channel: String,
     pub sender: Option<mpsc::UnboundedSender<std::result::Result<Message, warp::Error>>>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct RegisterRequest {
-    pub user_id: usize,
 }
 
 #[derive(serde::Serialize)]
@@ -21,12 +17,7 @@ pub struct RegisterResponse {
 
 #[derive(serde::Deserialize)]
 pub struct Event {
-    pub topic: String,
-    pub user_id: Option<usize>,
+    pub channel: String,
+    pub nick: Option<String>,
     pub message: String,
-}
-
-#[derive(serde::Deserialize)]
-pub struct TopicsRequest {
-    pub topics: Vec<String>
 }

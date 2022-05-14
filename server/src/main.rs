@@ -6,8 +6,8 @@ use warp::Filter;
 
 mod handlers;
 mod ws;
-
 mod structs;
+mod commands;
 
 type Clients = Arc<Mutex<HashMap<String, Client>>>;
 
@@ -17,34 +17,13 @@ async fn main() {
 
   let health_route = warp::path!("health").and_then(handlers::health_handler);
 
-  let register = warp::path("register");
-
-  let register_routes = register
-    .and(warp::post())
-    .and(warp::body::json())
-    .and(with_clients(clients.clone()))
-    .and_then(handlers::register_handler)
-    .or(register
-      .and(warp::delete())
-      .and(warp::path::param())
-      .and(with_clients(clients.clone()))
-      .and_then(handlers::unregister_handler));
-
-  let publish = warp::path!("publish")
-    .and(warp::body::json())
-    .and(with_clients(clients.clone()))
-    .and_then(handlers::publish_handler);
-
   let ws_route = warp::path("ws")
     .and(warp::ws())
-    .and(warp::path::param())
     .and(with_clients(clients.clone()))
     .and_then(handlers::ws_handler);
 
   let routes = health_route
-    .or(register_routes)
     .or(ws_route)
-    .or(publish)
     .with(warp::cors().allow_any_origin());
 
   warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
