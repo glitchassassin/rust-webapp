@@ -1,12 +1,16 @@
+
+use futures::{StreamExt, FutureExt};
+use serde_json::from_str;
 use tokio::sync::mpsc;
-use warp::ws::WebSocket;
-use futures::StreamExt;
+use warp::ws::{WebSocket, Message};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use crate::{Clients, structs::{Client, TopicsRequest}};
 
 pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut client: Client) {
   let (client_ws_sender, mut client_ws_rcv) = ws.split();
   let (client_sender, client_rcv) = mpsc::unbounded_channel();
+  let client_rcv = UnboundedReceiverStream::new(client_rcv);
 
   tokio::task::spawn(client_rcv.forward(client_ws_sender).map(|result| {
     if let Err(e) = result { 
@@ -45,7 +49,7 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
     return;
   }
 
-  let topics_req: TopicsRequest = match from_str(&message) {
+  let topics_req: TopicsRequest = match from_str(message) {
     Ok(v) => v,
     Err(e) => {
       eprintln!("error while parsing message to topics request: {}", e);
@@ -56,7 +60,8 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
   let mut locked = clients.lock().await;
   match locked.get_mut(id) {
     Some(v) => {
-      
-    }
-  }
+      v.topics = topics_req.topics;
+    },
+    None => (),
+  };
 }

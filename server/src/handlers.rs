@@ -1,17 +1,19 @@
 use uuid::Uuid;
-use warp::{Reply, reply::json, hyper::StatusCode, ws::{Ws, WebSocket}};
+use warp::{Reply, reply::json, hyper::StatusCode, ws::{Ws, Message}, Rejection};
 
-use crate::{structs::{RegisterRequest, RegisterResponse, Client}, Clients};
+use crate::{structs::{RegisterRequest, RegisterResponse, Client, Event}, Clients, ws};
 
-pub async fn register_handler(body: RegisterRequest, clients: Clients) -> impl Reply {
+type Result<T> = std::result::Result<T, Rejection>;
+
+pub async fn register_handler(body: RegisterRequest, clients: Clients) -> Result<impl Reply> {
   let user_id = body.user_id;
   let uuid = Uuid::new_v4().simple().to_string();
 
   register_client(uuid.clone(), user_id, clients).await;
 
-  json(&RegisterResponse {
+  Ok(json(&RegisterResponse {
     url: format!("ws://127.0.0.1:8000/ws/{}", uuid),
-  })
+  }))
 }
 
 async fn register_client(id: String, user_id: usize, clients: Clients) {
@@ -25,12 +27,12 @@ async fn register_client(id: String, user_id: usize, clients: Clients) {
   );
 }
 
-pub async fn unregister_handler(id: String, clients: Clients) -> impl Reply {
+pub async fn unregister_handler(id: String, clients: Clients) -> Result<impl Reply> {
   clients.lock().await.remove(&id);
-  StatusCode::OK
+  Ok(StatusCode::OK)
 }
 
-pub async fn ws_handler(ws: Ws, id: String, clients: Clients) -> Result<impl Reply, warp::reject::Rejection> {
+pub async fn ws_handler(ws: Ws, id: String, clients: Clients) -> Result<impl Reply> {
   let client = clients.lock().await.get(&id).cloned();
   match client {
     Some(c) => Ok(ws.on_upgrade(move |socket| ws::client_connection(socket, id, clients, c))),
@@ -38,3 +40,25 @@ pub async fn ws_handler(ws: Ws, id: String, clients: Clients) -> Result<impl Rep
   }
 }
 
+pub async fn publish_handler(body: Event, clients: Clients) -> Result<impl Reply> {
+  clients
+    .lock()
+    .await
+    .iter_mut()
+    .filter(|(_, client)| match body.user_id {
+      Some(v) => client.user_id == v,
+      None => true,
+    })
+    .filter(|(_, client)| client.topics.contains(&body.topic))
+    .for_each(|(_, client)| {
+      if let Some(sender) = &client.sender {
+        let _ = sender.send(Ok(Message::text(body.message.clone())));
+      }
+    });
+
+  Ok(StatusCode::OK)
+}
+
+pub async fn health_handler() -> Result<impl Reply> {
+  Ok(StatusCode::OK)
+}

@@ -1,15 +1,14 @@
-use std::{collections::HashMap, convert::Infallible,};
-use tokio::sync::{Arc, Mutex};
+use std::{collections::HashMap, convert::Infallible, sync::Arc};
 
 use structs::Client;
-use warp::{Rejection, Filter};
+use tokio::sync::Mutex;
+use warp::Filter;
 
 mod handlers;
 mod ws;
 
 mod structs;
 
-type Result<T> = std::result::Result<T, Rejection>;
 type Clients = Arc<Mutex<HashMap<String, Client>>>;
 
 #[tokio::main]
