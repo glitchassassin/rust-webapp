@@ -9,9 +9,9 @@ mod chat_server;
 
 #[tokio::main]
 async fn main() {
-  let server = ChatServer {
-    clients: Arc::new(Mutex::new(HashMap::new()))
-  };
+  let server = Arc::new(Mutex::new(ChatServer {
+    clients: HashMap::new()
+  }));
 
   let ws_route = warp::path("ws")
     .and(warp::ws())
@@ -24,6 +24,6 @@ async fn main() {
   warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
 
-fn with_chat_server(server: ChatServer) -> impl Filter<Extract = (ChatServer,), Error = Infallible> + Clone {
+fn with_chat_server(server: Arc<Mutex<ChatServer>>) -> impl Filter<Extract = (Arc<Mutex<ChatServer>>,), Error = Infallible> + Clone {
   warp::any().map(move || server.clone())
 }

@@ -1,6 +1,8 @@
 
+use std::sync::Arc;
+
 use futures::{StreamExt, FutureExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use warp::ws::WebSocket;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
@@ -10,11 +12,11 @@ use warp::{Reply, ws::Ws, Rejection};
 
 type Result<T> = std::result::Result<T, Rejection>;
 
-pub async fn ws_handler(ws: Ws, server: ChatServer) -> Result<impl Reply> {
+pub async fn ws_handler(ws: Ws, server: Arc<Mutex<ChatServer>>) -> Result<impl Reply> {
   Ok(ws.on_upgrade(move |socket| client_connection(socket, server)))
 }
 
-pub async fn client_connection(ws: WebSocket, server: ChatServer) {
+pub async fn client_connection(ws: WebSocket, server: Arc<Mutex<ChatServer>>) {
   let (client_ws_sender, mut client_ws_rcv) = ws.split();
   let (client_sender, client_rcv) = mpsc::unbounded_channel();
   let client_rcv = UnboundedReceiverStream::new(client_rcv);
@@ -25,7 +27,7 @@ pub async fn client_connection(ws: WebSocket, server: ChatServer) {
     }
   }));
 
-  let id = server.add_client(client_sender).await;
+  let id = server.lock().await.add_client(client_sender).await;
 
   println!("{} connected", id);
 
@@ -37,10 +39,10 @@ pub async fn client_connection(ws: WebSocket, server: ChatServer) {
         break;
       }
     };
-    server.handle_message(id.clone(), msg).await;
+    server.lock().await.handle_message(id.clone(), msg).await;
   }
 
-  server.remove_client(id.clone()).await;
+  server.lock().await.remove_client(id.clone()).await;
 
   println!("{} disconnected", id);
 }

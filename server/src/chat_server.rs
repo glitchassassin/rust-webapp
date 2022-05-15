@@ -1,6 +1,5 @@
-use std::{sync::Arc, collections::HashMap};
+use std::collections::HashMap;
 
-use tokio::sync::Mutex;
 use uuid::Uuid;
 use warp::ws::Message;
 use itertools::Itertools;
@@ -17,11 +16,11 @@ pub struct Client {
 
 #[derive(Clone)]
 pub struct ChatServer {
-  pub clients: Arc<Mutex<HashMap<String, Client>>>
+  pub clients: HashMap<String, Client>
 }
 
 impl ChatServer {
-  pub async fn add_client(&self, sender: ClientSender) -> String {
+  pub async fn add_client(&mut self, sender: ClientSender) -> String {
     let uuid = Uuid::new_v4().simple().to_string();
     let nick = format!("user{}", &uuid[0..5]);
     let client = Client {
@@ -30,21 +29,21 @@ impl ChatServer {
       sender,
       nick
     };
-    self.clients.lock().await.insert(
+    self.clients.insert(
       uuid.clone(),
-      client.clone()
+      client
     );
 
-    self.send_system_message(client.nick.clone(), String::from("Welcome to the server")).await;
+    // self.send_system_message(client.nick.clone(), String::from("Welcome to the server")).await;
 
     uuid
   }
 
-  pub async fn remove_client(&self, id: String) {
-    self.clients.lock().await.remove(&id);
+  pub async fn remove_client(&mut self, id: String) {
+    self.clients.remove(&id);
   }
 
-  pub async fn handle_message(&self, id: String, msg: Message) {
+  pub async fn handle_message(&mut self, id: String, msg: Message) {
     println!("received message from {}: {:?}", id, msg);
     let message = match msg.to_str() {
       Ok(v) => v,
@@ -58,31 +57,52 @@ impl ChatServer {
         (message, None)
       };
   
-      if let Some(client) = self.clients.lock().await.get_mut(&id) {
-        match command {
-          "/nick" => self.nick(client, params).await,
-          "/join" => self.join(client, params).await,
-          "/ping" => (),
-          "/users" => self.users(client).await,
-          "/list" => self.list(client).await,
-          _ => self.send_system_message(
-            id.to_string(), 
-            format!("Unknown command '{}'", command)
-          ).await,
-        }
+      match command {
+        "/nick" => {
+          if let Some(client) = self.clients.get(&id) { 
+            self.nick(client, params).await 
+          }
+          if let Some(client) = self.clients.get_mut(&id) { 
+            if let Some(nick) = params {
+              client.nick = nick.to_string();
+            }
+          }
+        },
+        "/join" => {
+          if let Some(client) = self.clients.get(&id) { 
+            self.join(client, params).await
+          }
+          if let Some(client) = self.clients.get_mut(&id) { 
+            if let Some(channel) = params {
+              client.channel = channel.to_string();
+            }
+          }
+        },
+        "/ping" => (),
+        "/users" => if let Some(client) = self.clients.get(&id) { 
+          self.users(client).await
+        },
+        "/list" => if let Some(client) = self.clients.get(&id) { 
+          self.list(client).await
+        },
+        _ => self.send_system_message(
+          id.to_string(), 
+          format!("Unknown command '{}'", command)
+        ).await,
       }
     } else {
       // Publish message
+      if let Some(client) = self.clients.get(&id) { 
+        self.publish_message(client.channel.clone(), client.nick.clone(), message.to_string()).await;
+      }
     }
   }
 
-  pub async fn nick(&self, client: &mut Client, nick: Option<&str>) {
+  pub async fn nick(&self, client: &Client, nick: Option<&str>) {
     if let Some(set_nick) = nick {
-      let old_nick = client.nick.clone();
-      client.nick = set_nick.to_string();
       self.send_system_message(
         client.channel.to_string(), 
-        format!("{} changed nick to {}", old_nick, client.nick)
+        format!("{} changed nick to {}", client.nick, set_nick)
       ).await;
     } else {
       self.send_system_message(
@@ -94,7 +114,7 @@ impl ChatServer {
   
   /// List channels
   pub async fn list(&self, client: &Client) {
-    let channels_list = self.clients.lock().await.iter()
+    let channels_list = self.clients.iter()
       .map(|(_, c)| format!("{}\n", c.channel))
       .unique()
       .collect();
@@ -102,16 +122,15 @@ impl ChatServer {
   }
   
   /// Join (or create) a channel
-  pub async fn join(&self, client: &mut Client, channel: Option<&str>) {
+  pub async fn join(&self, client: &Client, channel: Option<&str>) {
     if let Some(set_channel) = channel {
       if set_channel != client.channel {
         self.send_system_message(
           client.channel.clone(), 
           format!("{} left the channel", client.nick)
         ).await;
-        client.channel = set_channel.to_string();
         self.send_system_message(
-          client.channel.clone(), 
+          set_channel.to_string(), 
           format!("{} joined the channel", client.nick)
         ).await;
       } else {
@@ -130,7 +149,7 @@ impl ChatServer {
   
   /// List users in the current channel
   pub async fn users(&self, client: &Client) {
-    let users_list = self.clients.lock().await.iter()
+    let users_list = self.clients.iter()
       .filter(|(_, c)| c.channel == client.channel)
       .map(|(_, c)| format!("{}\n", c.nick))
       .collect();
@@ -145,14 +164,16 @@ impl ChatServer {
     ).await;
   }
   
-  pub async fn publish_message(&self, channel: String, message: String, nick: String) {
+  pub async fn publish_message(&self, channel: String, nick: String, message: String) {
+    let formatted_message = format!("{}: {}", nick, message);
+    println!("Queuing: [{}]", &formatted_message);
+
     self.clients
-      .lock()
-      .await
-      .iter_mut()
+      .iter()
       .filter(|(_, client)| client.channel == channel || client.user_id == channel)
       .for_each(|(_, client)| {
-        let _ = client.sender.send(Ok(Message::text(format!("{}: {}", nick, message))));
+        println!("Sending: [{}]", &formatted_message);
+        let _ = client.sender.send(Ok(Message::text(&formatted_message)));
       });
   }
 }
