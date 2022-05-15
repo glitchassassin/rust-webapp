@@ -1,34 +1,29 @@
 use std::{collections::HashMap, convert::Infallible, sync::Arc};
 
-use structs::Client;
+use chat_server::ChatServer;
 use tokio::sync::Mutex;
 use warp::Filter;
 
-mod handlers;
 mod ws;
-mod structs;
-mod commands;
-
-type Clients = Arc<Mutex<HashMap<String, Client>>>;
+mod chat_server;
 
 #[tokio::main]
 async fn main() {
-  let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
-
-  let health_route = warp::path!("health").and_then(handlers::health_handler);
+  let server = ChatServer {
+    clients: Arc::new(Mutex::new(HashMap::new()))
+  };
 
   let ws_route = warp::path("ws")
     .and(warp::ws())
-    .and(with_clients(clients.clone()))
-    .and_then(handlers::ws_handler);
+    .and(with_chat_server(server.clone()))
+    .and_then(ws::ws_handler);
 
-  let routes = health_route
-    .or(ws_route)
+  let routes = ws_route
     .with(warp::cors().allow_any_origin());
 
   warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
 
-fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = Infallible> + Clone {
-  warp::any().map(move || clients.clone())
+fn with_chat_server(server: ChatServer) -> impl Filter<Extract = (ChatServer,), Error = Infallible> + Clone {
+  warp::any().map(move || server.clone())
 }
