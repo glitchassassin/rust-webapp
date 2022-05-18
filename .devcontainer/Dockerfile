@@ -7,3 +7,6 @@ FROM mcr.microsoft.com/vscode/devcontainers/rust:0-${VARIANT}
 # [Optional] Uncomment this section to install additional packages.
 # RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 #     && apt-get -y install --no-install-recommends <your-package-list-here>
+
+RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash

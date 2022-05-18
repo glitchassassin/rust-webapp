@@ -13,3 +13,9 @@ This will be a simple chat app, with a backend Websocket server that forwards al
 ### Websocket server
 
 https://blog.logrocket.com/how-to-build-a-websocket-server-with-rust/
+
+### Frontend
+
+The UI integration can happen at any level, from DOM manipulation to a high-level API called by something like React.
+
+Since this is pretty simple, let's go low-level and do direct DOM manipulation.
