@@ -825,10 +825,13 @@ checksum = "d554b7f530dee5964d9a9468d95c1f8b8acae4f282807e7d27d4b03099a46744"
 name = "wasm-client"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "perseus",
  "serde",
  "serde_json",
  "sycamore",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
