@@ -1,3 +1,5 @@
+extern crate regex;
+use regex::Regex;
 use perseus::{Html, Template, SsrNode, RenderFnResultWithCause};
 use sycamore::{prelude::{View, view}, rt::Event};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
@@ -28,9 +30,15 @@ pub fn index_page(state: IndexPageStateRx) -> View<G> {
   let ws_clone = ws.clone();
   if let Some(Ok(ws)) = ws_clone {
     let cloned_messages = messages.clone();
+    let cloned_channel = state.channel.clone();
     let onmessage_callback = Closure::wrap(Box::new(move |e: MessageEvent| {
       if let Ok(txt) = e.data().dyn_into::<js_sys::JsString>() {
         if let Some(txt_string) = txt.as_string() {
+          let re = Regex::new("^System: .+ joined (.+)$").unwrap();
+          if let Some(x) = re.captures(&txt_string) {
+            let channel_name = x.get(1).map_or("General", |m| m.as_str());
+            cloned_channel.set(channel_name.to_string());
+          }
           cloned_messages.set(format!("{}{}\n", cloned_messages.get(), txt_string));
         }
       }

@@ -14,3 +14,4 @@ serde_json = "1.0"
 futures = { version = "0.3", default-features = false }
 uuid = { version = "1.0.0", features = ["serde", "v4"] }
 itertools = "0.10.3"
+warp-reverse-proxy = "0.5.0"

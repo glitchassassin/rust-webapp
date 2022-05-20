@@ -34,7 +34,7 @@ impl ChatServer {
       client
     );
 
-    // self.send_system_message(client.nick.clone(), String::from("Welcome to the server")).await;
+    self.send_system_message(uuid.clone(), String::from("Welcome to the server")).await;
 
     uuid
   }
@@ -69,13 +69,13 @@ impl ChatServer {
           }
         },
         "/join" => {
-          if let Some(client) = self.clients.get(&id) { 
-            self.join(client, params).await
-          }
           if let Some(client) = self.clients.get_mut(&id) { 
             if let Some(channel) = params {
               client.channel = channel.to_string();
             }
+          }
+          if let Some(client) = self.clients.get(&id) { 
+            self.join(client, params).await
           }
         },
         "/ping" => (),
@@ -85,9 +85,19 @@ impl ChatServer {
         "/list" => if let Some(client) = self.clients.get(&id) { 
           self.list(client).await
         },
+        "/help" => self.send_system_message(
+          id.to_string(), 
+          r#"Commands:
+  - `/nick [name]`     Change your nick
+  - `/join [channel]`  Join (or create) a channel
+  - `/users`           List users in this channel
+  - `/list`            List available channels
+  - `/help`            Display this help message
+          "#.to_string()
+        ).await,
         _ => self.send_system_message(
           id.to_string(), 
-          format!("Unknown command '{}'", command)
+          format!("Unknown command '{}' (try '/help')", command)
         ).await,
       }
     } else {
@@ -117,8 +127,9 @@ impl ChatServer {
     let channels_list = self.clients.iter()
       .map(|(_, c)| format!("{}\n", c.channel))
       .unique()
-      .collect();
-    self.send_system_message(client.user_id.clone(), channels_list).await;
+      .collect::<String>();
+    
+    self.send_system_message(client.user_id.clone(), format!("Channels: \n{}", channels_list)).await;
   }
   
   /// Join (or create) a channel
@@ -131,7 +142,7 @@ impl ChatServer {
         ).await;
         self.send_system_message(
           set_channel.to_string(), 
-          format!("{} joined the channel", client.nick)
+          format!("{} joined {}", client.nick, client.channel)
         ).await;
       } else {
         self.send_system_message(

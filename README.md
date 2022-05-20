@@ -18,4 +18,4 @@ https://blog.logrocket.com/how-to-build-a-websocket-server-with-rust/
 
 The UI integration can happen at any level, from DOM manipulation to a high-level API called by something like React.
 
-Since this is pretty simple, let's go low-level and do direct DOM manipulation.
+In this experiment, we're using the Perseus front-end framework to do DOM manipulation.
