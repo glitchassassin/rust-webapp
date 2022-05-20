@@ -827,6 +827,7 @@ version = "0.1.0"
 dependencies = [
  "js-sys",
  "perseus",
+ "regex",
  "serde",
  "serde_json",
  "sycamore",
