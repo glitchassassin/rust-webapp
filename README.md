@@ -1,6 +1,6 @@
 # rust-webapp
 
-An experimental webapp with a WASM core and JS/HTML UI
+An experimental full-stack webapp in Rust
 
 ## Purpose
 
@@ -12,10 +12,24 @@ This will be a simple chat app, with a backend Websocket server that forwards al
 
 ### Websocket server
 
-https://blog.logrocket.com/how-to-build-a-websocket-server-with-rust/
+```
+cd server
+cargo run
+```
+
+The Warp server will run on port 8000, and will proxy any requests (aside from the websocket) to the Perseus server on port 8080.
 
 ### Frontend
 
-The UI integration can happen at any level, from DOM manipulation to a high-level API called by something like React.
-
 In this experiment, we're using the Perseus front-end framework to do DOM manipulation.
+
+For setup details, see [wasm-client/README.md](wasm-client/README.md).
+
+```
+cd wasm-client
+perseus serve
+```
+
+## Results
+
+Once set up, you should be able to open a pair of browser windows at `http://localhost:8000/` and interact with a very simplistic IRC-like chat interface!
